@@ -1,0 +1,12 @@
+{
+  "name": "trust-thing",
+  "version": "0.0.0",
+  "type": "module",
+  "devDependencies": {
+    "chrome-types": "^0.1.427",
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "build": "cp -r static/ dist/ && tsc"
+  }
+}

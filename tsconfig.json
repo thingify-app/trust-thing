@@ -1,0 +1,7 @@
+{
+    "compilerOptions": {
+        "outDir": "dist",
+        "module": "es2022",
+        "types": ["chrome-types"]
+    }
+}

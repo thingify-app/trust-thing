@@ -18,18 +18,10 @@
       "run_at": "document_start"
     }
   ],
-  "declarative_net_request": {
-    "rule_resources": [
-      {
-        "id": "1",
-        "enabled": true,
-        "path": "break_csp_rule.json"
-      }
-    ]
-  },
   "permissions": [
+    "activeTab",
     "declarativeNetRequest",
-    "declarativeNetRequestFeedback"
+    "storage"
   ],
   "host_permissions": [
     "http://localhost:8080/*"

@@ -22,6 +22,7 @@ async function syncRules() {
     const removeRuleIds = existingRules.map(rule => rule.id);
 
     const addRules: chrome.declarativeNetRequest.Rule[] = [];
+    const contentScripts: chrome.scripting.RegisteredContentScript[] = [];
     let currentId = 1;
 
     for (const [domain, hashes] of Object.entries(storageData)) {
@@ -42,12 +43,27 @@ async function syncRules() {
                 resourceTypes: ['main_frame', 'sub_frame']
             }
         });
+
+        contentScripts.push({
+            id: domain,
+            // Content script matcher does not accept a port, so split that from
+            // the domain here:
+            matches: [`*://${domain.split(':')[0]}/*`],
+            js: ['content.js'],
+            css: ['content.css'],
+            runAt: 'document_start',
+        })
     }
 
     await chrome.declarativeNetRequest.updateDynamicRules({
         removeRuleIds,
         addRules,
     });
+
+    // To sync content script state, just unregister all and re-register the
+    // active scripts from state.
+    await chrome.scripting.unregisterContentScripts();
+    await chrome.scripting.registerContentScripts(contentScripts);
 }
 
 chrome.storage.sync.onChanged.addListener(syncRules);

@@ -1,4 +1,5 @@
 const currentDomain = document.getElementById('currentDomain') as HTMLDivElement;
+const settingsButton = document.getElementById('settings') as HTMLButtonElement;
 const hashList = document.getElementById('hashList') as HTMLUListElement;
 const clearAllButton = document.getElementById('clearAll') as HTMLButtonElement;
 const hashText = document.getElementById('hashText') as HTMLInputElement;
@@ -18,6 +19,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         setHashButton.disabled = true;
         renderHashList([]);
     }
+});
+
+settingsButton.addEventListener('click', async () => {
+    await chrome.runtime.openOptionsPage();
 });
 
 clearAllButton.addEventListener('click', async () => {

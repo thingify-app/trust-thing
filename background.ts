@@ -1,8 +1,13 @@
-import { compareHashes, saveHashes, verifyOrigin } from './attestation.js';
+import { compareHashes, getHashes, isEnabledForOrigin, saveHashes, verifyOrigin } from './attestation.js';
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     if (changeInfo.status === 'loading') {
-        setBadgePositive(tabId);
+        const origin = getTabOrigin(tab);
+        if (origin && await isEnabledForOrigin(origin)) {
+            setBadgePositive(tabId);
+        } else {
+            setBadgeNeutral(tabId);
+        }
     }
 });
 
@@ -13,13 +18,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function assessViolation(tab: chrome.tabs.Tab) {
-    const storageData = await chrome.storage.sync.get() as {[name: string]: string[]};
     const tabId = tab.id!;
-    const tabUrl = URL.parse(tab.url!);
-    const origin = tabUrl?.origin!;
+    const origin = getTabOrigin(tab);
 
-    // Re-fetch the rules
-    const storedHashes = storageData[origin];
+    if (!origin) {
+        return;
+    }
+
+    // Get the existing stored rules.
+    const storedHashes = await getHashes(origin);
+    if (storedHashes === null) {
+        await setBadgeNegative(tabId);
+        await chrome.tabs.sendMessage(tabId, {type: 'VIOLATION_CONFIRMED'});
+        return;
+    }
+
+    // Re-fetch the latest rules.
     const freshHashes = await verifyOrigin(origin);
 
     console.log('Hashes:');
@@ -54,6 +68,11 @@ async function setBadgePositive(tabId: number) {
 async function setBadgeNegative(tabId: number) {
     await chrome.action.setBadgeText({tabId, text: 'x'});
     await chrome.action.setBadgeBackgroundColor({tabId, color: '#FF0000'});
+}
+
+async function setBadgeNeutral(tabId: number) {
+    await chrome.action.setBadgeText({tabId, text: 'o'});
+    await chrome.action.setBadgeBackgroundColor({tabId, color: '#AAAAAA'});
 }
 
 async function syncRules() {
@@ -110,6 +129,14 @@ async function syncRules() {
     if (removeScriptIds.size > 0) {
         await chrome.scripting.unregisterContentScripts({ids: [...removeScriptIds]});
     }
+}
+
+function getTabOrigin(tab: chrome.tabs.Tab): string|null {
+    if (!tab.url) {
+        return null;
+    }
+    const tabUrl = URL.parse(tab.url);
+    return tabUrl?.origin ?? null;
 }
 
 chrome.storage.sync.onChanged.addListener(syncRules);

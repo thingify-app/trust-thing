@@ -1,8 +1,7 @@
-import { verifyOrigin, saveHashes, clearHashes } from './attestation.js';
+import { verifyOrigin, saveHashes, clearHashes, isEnabledForOrigin } from './attestation.js';
 
 const currentDomain = document.getElementById('currentDomain') as HTMLDivElement;
 const settingsButton = document.getElementById('settings') as HTMLButtonElement;
-const hashList = document.getElementById('hashList') as HTMLUListElement;
 const enableButton = document.getElementById('enable') as HTMLButtonElement;
 const disableButton = document.getElementById('disable') as HTMLButtonElement;
 
@@ -20,31 +19,15 @@ enableButton.addEventListener('click', async () => {
     const hashes = await verifyOrigin(origin!);
     await saveHashes(origin!, hashes!);
     await renderPage();
+    await reloadTab();
 });
 
 disableButton.addEventListener('click', async () => {
     const origin = await getCurrentTabOrigin();
     await clearHashes(origin!);
     await renderPage();
+    await reloadTab();
 });
-
-async function getCurrentTabOrigin(): Promise<string|null> {
-    const tabs = await chrome.tabs.query({active: true, currentWindow: true});
-    const currentTab = tabs[0];
-    if (currentTab && currentTab.url) {
-        const url = URL.parse(currentTab.url);
-        return url?.origin ?? null;
-    } else {
-        return null;
-    }
-}
-
-async function isEnabledForOrigin(origin: string): Promise<boolean> {
-    const results = await chrome.storage.sync.get(origin);
-    console.log(`Results: ${results}`);
-    console.log(results);
-    return Object.hasOwn(results, origin);
-}
 
 async function renderPage() {
     const origin = await getCurrentTabOrigin();
@@ -52,14 +35,13 @@ async function renderPage() {
     if (origin) {
         const enabled = await isEnabledForOrigin(origin);
         if (enabled) {
-            currentDomain.innerHTML = `<h2>${origin}</h2> enabled.`;
+            currentDomain.innerHTML = `<h2>${origin}</h2>TrustThing enabled.`;
             enableButton.style.display = 'none';
             disableButton.style.display = 'block';
         } else {
             const hashes = await verifyOrigin(origin);
             if (hashes) {
-                currentDomain.innerHTML = `<h2>${origin}</h2>Supports attestation hashes!`;
-                renderHashList(hashes);
+                currentDomain.innerHTML = `<h2>${origin}</h2>Supports attestation hashes! Enable?`;
                 enableButton.style.display = 'block';
                 disableButton.style.display = 'none';
             } else {
@@ -72,16 +54,28 @@ async function renderPage() {
         currentDomain.innerText = `Domain not available on this page.`;
         enableButton.style.display = 'none';
         disableButton.style.display = 'none';
-        renderHashList([]);
     }
 }
 
-function renderHashList(hashes: string[]) {
-    console.log(hashes);
-    hashList.replaceChildren();
-    for (const hash of hashes) {
-        const listItem = document.createElement('li');
-        listItem.textContent = hash;
-        hashList.appendChild(listItem);
+async function reloadTab() {
+    const tab = await getCurrentTab();
+    // Hacky - wait for rules to have a chance to apply before reloading.
+    setTimeout(() => {
+        chrome.tabs.reload(tab.id);
+    }, 500);
+}
+
+async function getCurrentTabOrigin(): Promise<string|null> {
+    const currentTab = await getCurrentTab();
+    if (currentTab.url) {
+        const url = URL.parse(currentTab.url);
+        return url?.origin ?? null;
+    } else {
+        return null;
     }
+}
+
+async function getCurrentTab(): Promise<chrome.tabs.Tab> {
+    const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+    return tabs[0];
 }

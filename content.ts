@@ -1,21 +1,30 @@
-document.addEventListener('securitypolicyviolation', event => {
-    const div = document.createElement('div');
-    div.innerHTML = 'Page has violated policy!';
-    div.className = 'alert';
-    document.body.appendChild(div);
+let intervalHandle = 0;
 
-    updateAction(event);
+document.addEventListener('securitypolicyviolation', async () => {
+    updateAction();
 
     // Periodically call the extension with the violated state, as the tabId may
     // change after the initial event is fired (e.g. if Chrome prefetches the
     // page).
-    setInterval(() => updateAction(event), 500);
+    intervalHandle = setInterval(() => updateAction(), 500);
 });
 
-function updateAction(event: SecurityPolicyViolationEvent) {
+function updateAction() {
     chrome.runtime.sendMessage({
-        type: 'RESOURCE_BLOCKED_BY_CSP',
-        blockedUri: event.blockedURI,
-        directive: event.violatedDirective
+        type: 'VIOLATION_DETECTED'
     });
+}
+
+chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'VIOLATION_CONFIRMED') {
+        clearInterval(intervalHandle);
+        showViolationMessage();
+    }
+});
+
+function showViolationMessage() {
+    const div = document.createElement('div');
+    div.innerHTML = 'Page has violated policy!';
+    div.className = 'alert';
+    document.body.appendChild(div);
 }

@@ -1,66 +1,79 @@
+import { verifyOrigin, saveHashes, clearHashes } from './attestation.js';
+
 const currentDomain = document.getElementById('currentDomain') as HTMLDivElement;
 const settingsButton = document.getElementById('settings') as HTMLButtonElement;
 const hashList = document.getElementById('hashList') as HTMLUListElement;
-const clearAllButton = document.getElementById('clearAll') as HTMLButtonElement;
-const hashText = document.getElementById('hashText') as HTMLInputElement;
-const setHashButton = document.getElementById('setHash') as HTMLButtonElement;
+const enableButton = document.getElementById('enable') as HTMLButtonElement;
+const disableButton = document.getElementById('disable') as HTMLButtonElement;
 
 // Initial page setup:
 document.addEventListener('DOMContentLoaded', async () => {
-    const domain = await getCurrentTabDomain();
-    if (domain) {
-        currentDomain.innerHTML = `<h2>${domain}</h2>`;
-
-        renderHashList(await getHashesForDomain(domain));
-
-        setHashButton.disabled = false;
-    } else {
-        currentDomain.innerText = `Domain not available on this page.`;
-        setHashButton.disabled = true;
-        renderHashList([]);
-    }
+    await renderPage();
 });
 
 settingsButton.addEventListener('click', async () => {
     await chrome.runtime.openOptionsPage();
 });
 
-clearAllButton.addEventListener('click', async () => {
-    const domain = await getCurrentTabDomain();
-    if (domain) {
-        await chrome.storage.sync.remove(domain);
-        renderHashList(await getHashesForDomain(domain));
-    }
+enableButton.addEventListener('click', async () => {
+    const origin = await getCurrentTabOrigin();
+    const hashes = await verifyOrigin(origin!);
+    await saveHashes(origin!, hashes!);
+    await renderPage();
 });
 
-setHashButton.addEventListener('click', async () => {
-    const domain = (await getCurrentTabDomain())!;
-    const hashes = await getHashesForDomain(domain);
-
-    const hash = hashText.value;
-    if (!validateHash(hash)) {
-        alert('Invalid hash!');
-    }
-    hashes.push(hash);
-
-    renderHashList(hashes);
-    await chrome.storage.sync.set({[domain]: hashes});
+disableButton.addEventListener('click', async () => {
+    const origin = await getCurrentTabOrigin();
+    await clearHashes(origin!);
+    await renderPage();
 });
 
-async function getCurrentTabDomain(): Promise<string|null> {
+async function getCurrentTabOrigin(): Promise<string|null> {
     const tabs = await chrome.tabs.query({active: true, currentWindow: true});
     const currentTab = tabs[0];
     if (currentTab && currentTab.url) {
         const url = URL.parse(currentTab.url);
-        return url?.host ?? null;
+        return url?.origin ?? null;
     } else {
         return null;
     }
 }
 
-async function getHashesForDomain(domain: string): Promise<string[]> {
-    const storedData = await chrome.storage.sync.get({[domain]: []});
-    return storedData[domain] as string[];
+async function isEnabledForOrigin(origin: string): Promise<boolean> {
+    const results = await chrome.storage.sync.get(origin);
+    console.log(`Results: ${results}`);
+    console.log(results);
+    return Object.hasOwn(results, origin);
+}
+
+async function renderPage() {
+    const origin = await getCurrentTabOrigin();
+
+    if (origin) {
+        const enabled = await isEnabledForOrigin(origin);
+        if (enabled) {
+            currentDomain.innerHTML = `<h2>${origin}</h2> enabled.`;
+            enableButton.style.display = 'none';
+            disableButton.style.display = 'block';
+        } else {
+            const hashes = await verifyOrigin(origin);
+            if (hashes) {
+                currentDomain.innerHTML = `<h2>${origin}</h2>Supports attestation hashes!`;
+                renderHashList(hashes);
+                enableButton.style.display = 'block';
+                disableButton.style.display = 'none';
+            } else {
+                currentDomain.innerHTML = `<h2>${origin}</h2>Does not support attestation hashes.`;
+                enableButton.style.display = 'none';
+                disableButton.style.display = 'none';
+            }
+        }
+    } else {
+        currentDomain.innerText = `Domain not available on this page.`;
+        enableButton.style.display = 'none';
+        disableButton.style.display = 'none';
+        renderHashList([]);
+    }
 }
 
 function renderHashList(hashes: string[]) {
@@ -71,8 +84,4 @@ function renderHashList(hashes: string[]) {
         listItem.textContent = hash;
         hashList.appendChild(listItem);
     }
-}
-
-function validateHash(hash: string): boolean {
-    return hash.startsWith('sha256-') || hash.startsWith('sha384-') || hash.startsWith('sha512-');
 }
